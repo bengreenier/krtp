@@ -1,28 +1,70 @@
 # KRTP
 
-[![Travis branch](https://img.shields.io/travis/com/1995parham/krtp/master.svg?style=flat-square)](https://travis-ci.com/1995parham/krtp)
-[![GitHub stars](https://img.shields.io/github/stars/1995parham/krtp.svg?style=flat-square)](https://github.com/1995parham/krtp/stargazers)
-[![npm version](https://img.shields.io/npm/v/krtp.svg?style=flat-square)](https://www.npmjs.com/package/krtp)
-[![npm license](https://img.shields.io/npm/l/krtp.svg?style=flat-square)]()
-[![npm](https://img.shields.io/npm/dw/krtp.svg?style=flat-square)]()
-[![Codacy Badge](https://api.codacy.com/project/badge/Grade/8073505d59d241b6beeda1451a3bcf5e)](https://www.codacy.com/app/1995parham/krtp?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=1995parham/krtp&amp;utm_campaign=Badge_Grade)
-
-- [Introduction](#introduction)
-- [Example](#example)
-- [Protocol Documentation](https://github.com/1995parham/krtp/blob/master/docs/RTP.md)
+RealTime Protocol implementation based on [RFC 3550](https://tools.ietf.org/html/rfc3550) for JS. It supports RTP and the SR message of RTCP. Custom sockets supported.
 
 ## Introduction
-RealTime Protocol implementation based on [RFC 3550](https://tools.ietf.org/html/rfc3550) in NodeJS.
-It supports RTP and SR message of RTCP. All contributions are welcome.
-KRTP has support for rxjs.
+
+Modified from [1995parham/krtp](https://github.com/1995parham/krtp) to remove the dependency on rxjs, and support custom socket implementations.
 
 ## Example
 
-```javascript
-const Session = require('../dist').Session
+> See [`test-socket-factory`](./__tests__/test-socket-factory.ts) for an example socket implementation.
 
-const s = new Session(1373)
+```
+import { EventEmitter } from "events";
+import { AddressInfo } from "net";
+import { Socket as UDPSocket, createSocket as createUDPSocket } from "dgram";
+import {
+  AbstractSocketFactory,
+  AbstractSocket,
+  AbstractSocketEventEmitter,
+  AbstractSocketRemoteInfo,
+  Session
+} from "@bengreenier/krtp";
 
+// Build a test socket implementation
+export class UDP4Socket
+  extends (EventEmitter as { new (): AbstractSocketEventEmitter })
+  implements AbstractSocket {
+  constructor(private udpSocket: UDPSocket) {
+    super();
+
+    // don't forget this!
+    this.udpSocket.on("message", (msg: Buffer, rinfo: AddressInfo) => {
+      this.emit("message", msg, rinfo as AbstractSocketRemoteInfo);
+    });
+  }
+
+  bind(port: number): void {
+    this.udpSocket.bind(port);
+  }
+  send(
+    msg: string | Buffer | Uint8Array,
+    port: number,
+    address: string,
+    cb: (err: Error | null, bytes: number) => void
+  ): void;
+  send(
+    msg: string | Buffer | Uint8Array,
+    cb: (err: Error | null, bytes: number) => void
+  ): void;
+  send(msg: any, port: any, address?: any, cb?: any) {
+    this.udpSocket.send(msg, port, address, cb);
+  }
+  close(): void {
+    this.udpSocket.close();
+  }
+}
+
+// Build a test socket factory implementation
+export class UDP4SocketFactory implements AbstractSocketFactory {
+  createSocket(): AbstractSocket {
+    return new TestSocket(createUDPSocket("udp4"));
+  }
+}
+
+// Use them to create a session
+const sess = new Session(1234, new UDP4SocketFactory(), 95);
 s.on('message', (msg) => {
   console.log(msg)
   s.close()
@@ -34,9 +76,18 @@ s.sendSR('192.168.73.4').catch(err => {
 s.send(Buffer.from('Hello world'))
 ```
 
-```typescript
-import { Session } from '..';
+Special thanks to [@1995parham](https://github.com/1995parham) - the creator of [the original krtp](https://github.com/1995parham/krtp) library that this work is derived from.
 
-const s = new Session(1372);
-s.message$.subscribe((msg) => console.log(msg));
-```
+## FAQ
+
+### Why is the example so long?
+
+Because I didn't include a built-in socket implementation, because this library probably isn't for you, and is instead, tailored to the specific needs of a problem I had. Sorry!
+
+### Can I contribute?
+
+Sure - But this is firmly a side project, my time spent on maintaining it will be severly limited.
+
+### LICENSE
+
+GPL-3.0
